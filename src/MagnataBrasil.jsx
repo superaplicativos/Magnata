@@ -641,12 +641,17 @@ export default function MagnataBrasilPremium() {
   const [nowTs, setNowTs] = useState(Date.now());
   const [autoPlay, setAutoPlay] = useState(false);
   const [pixModal, setPixModal] = useState({ show: false, boost: null, amount: 0, bonus: 0, qrCode: null, qrCodeBase64: null, id: null, status: 'pending', simulation: false });
-  
+  const [clickedBoost, setClickedBoost] = useState(null);
+
   const handleSelectBoost = async (boostId) => {
     const prices = { bronze: 0.10, prata: 0.20, ouro: 0.30 };
     const bonuses = { bronze: 5000, prata: 10000, ouro: 20000 };
 
     console.log("🚀 Botão de boost clicado:", boostId);
+
+    // Feedback visual imediato
+    setClickedBoost(boostId);
+    setTimeout(() => setClickedBoost(null), 800);
 
     // ABRE O MODAL IMEDIATAMENTE com loading
     setPixModal({
@@ -1753,23 +1758,30 @@ export default function MagnataBrasilPremium() {
               ].map((b) => {
                 const myPlayerObj = game.players.find(p => p.id === pid);
                 const hasThisBoost = myPlayerObj && myPlayerObj.boost === b.id;
+                const isClicking = clickedBoost === b.id;
                 return (
                   <button
                     key={b.id}
                     onClick={() => handleSelectBoost(b.id)}
-                    className="flex flex-col items-center justify-between p-2 rounded-xl text-center border-2 transition-all relative overflow-hidden hover:scale-105 active:scale-95"
+                    className={`flex flex-col items-center justify-between p-2 rounded-xl text-center border-2 transition-all relative overflow-hidden hover:scale-105 active:scale-95 ${isClicking ? 'animate-pulse' : ''}`}
                     style={{
                       background: b.bg,
-                      borderColor: hasThisBoost ? "#FFF" : "transparent",
-                      boxShadow: hasThisBoost ? "0 0 12px rgba(255,255,255,0.8)" : "none",
-                      transform: hasThisBoost ? "scale(1.05)" : "scale(1)",
+                      borderColor: hasThisBoost ? "#FFF" : isClicking ? "#FFD700" : "transparent",
+                      boxShadow: hasThisBoost ? "0 0 12px rgba(255,255,255,0.8)" : isClicking ? "0 0 20px rgba(255,215,0,0.8)" : "none",
+                      transform: hasThisBoost ? "scale(1.05)" : isClicking ? "scale(1.1)" : "scale(1)",
                     }}
                   >
-                    <span className="font-bold text-xs uppercase tracking-wider">{b.name}</span>
-                    <span className="text-[10px] opacity-80 mt-0.5">{b.price}</span>
-                    <span className="font-extrabold text-xs mt-1">{b.bonus}</span>
+                    {isClicking && (
+                      <span className="absolute inset-0 bg-white opacity-30 animate-ping rounded-xl"></span>
+                    )}
+                    <span className="font-bold text-xs uppercase tracking-wider relative z-10">{b.name}</span>
+                    <span className="text-[10px] opacity-80 mt-0.5 relative z-10">{b.price}</span>
+                    <span className="font-extrabold text-xs mt-1 relative z-10">{b.bonus}</span>
                     {hasThisBoost && (
-                      <span className="absolute top-1 right-1 text-[10px]">✅</span>
+                      <span className="absolute top-1 right-1 text-[10px] z-10">✅</span>
+                    )}
+                    {isClicking && (
+                      <span className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-3xl z-20 animate-bounce">⚡</span>
                     )}
                   </button>
                 );
@@ -1885,6 +1897,88 @@ export default function MagnataBrasilPremium() {
             })()}
           </div>
           <button onClick={leaveToHome} className="block mx-auto mt-4 text-sm underline opacity-70">Sair da sala</button>
+
+          {/* MODAL: Checkout PIX Mercado Pago - LOBBY */}
+          {pixModal.show && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-3" style={{ background: "rgba(0,0,0,.65)" }} onClick={() => setPixModal(prev => ({ ...prev, show: false }))}>
+              <div className="w-full max-w-sm rounded-2xl p-5 text-center" style={{ background: "#FBF5E9", color: "#1A1A1A", boxShadow: "0 20px 50px rgba(0,0,0,0.5)" }} onClick={(e) => e.stopPropagation()}>
+                <h3 className="font-bold text-lg mb-1 text-blue-800">⚡ Pagamento do Boost ({pixModal.boost?.toUpperCase()})</h3>
+                <p className="text-xs opacity-75 mb-3">O bônus de <b>+R$ {pixModal.bonus.toLocaleString("pt-BR")}</b> será creditado ao iniciar a partida!</p>
+
+                <div className="bg-white p-3 rounded-xl inline-block mb-3 border-2 border-dashed border-blue-400">
+                  {pixModal.status === "loading" ? (
+                    <div className="w-48 h-48 mx-auto flex flex-col items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg">
+                      <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-200 border-t-blue-600 mb-3"></div>
+                      <span className="text-sm font-bold text-blue-800">Gerando QR Code...</span>
+                      <span className="text-[10px] opacity-60 mt-1 animate-pulse">Aguarde alguns segundos</span>
+                    </div>
+                  ) : pixModal.qrCodeBase64 ? (
+                    <img src={`data:image/png;base64,${pixModal.qrCodeBase64}`} alt="QR Code PIX" className="w-48 h-48 mx-auto" />
+                  ) : (
+                    <div className="w-48 h-48 mx-auto flex flex-col items-center justify-center bg-gray-100 text-gray-500 rounded-lg">
+                      <span className="text-4xl mb-1">📱</span>
+                      <span className="text-xs font-bold px-2 text-center">QR CODE PIX SIMULADO</span>
+                      <span className="text-[9px] opacity-75 mt-1">(Modo de Desenvolvimento)</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="text-sm font-bold text-green-700 mb-2">Valor: R$ {pixModal.amount?.toFixed(2)}</div>
+
+                {pixModal.status !== "loading" && (
+                  <div className="mb-3 text-left">
+                    <label className="text-[10px] font-bold opacity-60 uppercase">Código PIX Copia e Cola:</label>
+                    <div className="flex gap-1 mt-0.5">
+                      <input
+                        readOnly
+                        value={pixModal.qrCode || ""}
+                        onClick={(e) => e.target.select()}
+                        className="flex-1 text-xs px-2 py-1.5 rounded-lg border border-gray-300 bg-gray-50 font-mono truncate"
+                      />
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(pixModal.qrCode);
+                          alert("Código PIX copiado! Cole no app do seu banco.");
+                        }}
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 text-xs font-bold rounded-lg"
+                      >
+                        Copiar
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {pixModal.status === "loading" ? (
+                  <p className="text-xs text-blue-700 font-semibold mb-3 animate-pulse">
+                    ⚡ Conectando com Mercado Pago...
+                  </p>
+                ) : pixModal.simulation ? (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 mb-4">
+                    <p className="text-[10px] text-yellow-700 font-semibold mb-2 leading-tight">
+                      💡 O servidor está sem credenciais do Mercado Pago ou fora do ar. Use a simulação abaixo para testar o boost de graça!
+                    </p>
+                    <button
+                      onClick={simulatePixPayment}
+                      className="w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-bold text-sm py-2 rounded-xl shadow-lg transition-all"
+                    >
+                      Simular Pagamento PIX 🤝
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-[10px] opacity-60 animate-pulse mb-3">
+                    ⏳ Aguardando confirmação do pagamento... O boost ativa automaticamente ao pagar.
+                  </p>
+                )}
+
+                <button
+                  onClick={() => setPixModal(prev => ({ ...prev, show: false }))}
+                  className="w-full border-2 border-gray-400 text-gray-700 font-bold py-2 rounded-xl text-sm"
+                >
+                  Voltar
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );
