@@ -91,7 +91,9 @@ export default function CreateRoomScreen({ userId, userName, onBack, onRoomCreat
         }
 
         console.log("✅ Sala criada no DB:", matchData);
-        setSuccessMessage(`✅ Sala "${roomName.trim()}" criada com sucesso! Código: ${roomCode}`);
+        console.log("📝 Código da sala gerado:", roomCode);
+        console.log("📝 Código salvo no banco:", matchData.room_code);
+        setSuccessMessage(`✅ Sala "${roomName.trim()}" criada! Código: ${roomCode} (ID: ${matchData.id})`);
 
         // Adicionar o host como primeiro jogador na tabela match_players
         console.log("👤 Adicionando host como jogador...");

@@ -75,6 +75,7 @@ export default function PublicRoomsScreen({ onBack, onJoinRoom }) {
         setRooms([]);
       } else {
         console.log("✅ Salas carregadas:", data);
+        console.log("📋 Códigos das salas:", data.map(r => ({ nome: r.room_name, codigo: r.room_code, id: r.id })));
         setDebugInfo(`✅ ${data?.length || 0} salas encontradas no banco!`);
 
         // Buscar jogadores separadamente para cada sala
@@ -85,6 +86,7 @@ export default function PublicRoomsScreen({ onBack, onJoinRoom }) {
               .select("*")
               .eq("match_id", room.id);
 
+            console.log(`Sala ${room.room_name} (${room.room_code}): ${players?.length || 0} jogadores`);
             return { ...room, players: players || [] };
           })
         );
