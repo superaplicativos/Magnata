@@ -966,7 +966,7 @@ export default function MagnataBrasilPremium() {
       v: 0,
       status: "lobby",
       host: pid,
-      players: [{ id: pid, name: name.trim(), token: tokenIdx, pos: 0, money: START_MONEY, inJail: false, jailTurns: 0, bankrupt: false }],
+      players: [{ id: pid, name: name.trim(), token: tokenIdx, pos: 0, money: START_MONEY, inJail: false, jailTurns: 0, bankrupt: false, ready: false }],
       props: {},
       currentTurn: 0,
       turn: { phase: "roll", doubles: 0, canBuy: null },
@@ -1025,7 +1025,7 @@ export default function MagnataBrasilPremium() {
         const taken = g.players.map((p) => p.token);
         let tk = tokenIdx;
         while (taken.includes(tk)) tk = (tk + 1) % TOKENS.length;
-        g.players.push({ id: pid, name: name.trim(), token: tk, pos: 0, money: START_MONEY, inJail: false, jailTurns: 0, bankrupt: false });
+        g.players.push({ id: pid, name: name.trim(), token: tk, pos: 0, money: START_MONEY, inJail: false, jailTurns: 0, bankrupt: false, ready: false });
         addLog(g, `${name.trim()} entrou na sala.`);
 
         await saveGame(g);
@@ -1074,7 +1074,8 @@ export default function MagnataBrasilPremium() {
       while (taken.includes(tk)) tk++;
       const used = g.players.map((p) => p.name);
       const nm = BOT_NAMES.find((n) => !used.includes(n)) || "Robô " + (g.players.length + 1);
-      g.players.push({ id: "bot" + Math.random().toString(36).slice(2, 8), bot: true, name: nm, token: tk, pos: 0, money: START_MONEY, inJail: false, jailTurns: 0, bankrupt: false });
+      // Bots não precisam marcar como pronto - ignoram o sistema de ready
+      g.players.push({ id: "bot" + Math.random().toString(36).slice(2, 8), bot: true, name: nm, token: tk, pos: 0, money: START_MONEY, inJail: false, jailTurns: 0, bankrupt: false, ready: true });
       addLog(g, `🤖 ${nm} entrou na sala.`);
     });
 
@@ -1082,6 +1083,14 @@ export default function MagnataBrasilPremium() {
     act((g) => {
       if (g.status !== "lobby") return;
       g.players = g.players.filter((p) => p.id !== id);
+    });
+
+  const toggleReady = () =>
+    act((g) => {
+      const idx = g.players.findIndex((p) => p.id === pid);
+      if (idx !== -1) {
+        g.players[idx].ready = !g.players[idx].ready;
+      }
     });
 
   const leaveToHome = async () => {
@@ -1763,22 +1772,40 @@ export default function MagnataBrasilPremium() {
           <div className="rounded-2xl p-5" style={{ background: "#FBF5E9", color: "#1A1A1A" }}>
             <div className="text-xs font-bold uppercase tracking-wide opacity-70 mb-2">Jogadores ({game.players.length}/6)</div>
             {game.players.map((p) => (
-              <div key={p.id} className="flex items-center gap-3 py-2 border-b border-gray-200 last:border-0">
+              <div key={p.id} className="flex items-center gap-2 py-2 border-b border-gray-200 last:border-0">
                 <span className="text-2xl">{TOKENS[p.token]}</span>
-                <div className="flex flex-col">
-                  <span className="font-bold">{p.name}</span>
+                <div className="flex flex-col flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold">{p.name}</span>
+                    {p.id === pid && <span className="text-xs opacity-60">(você)</span>}
+                  </div>
                   {p.boost && (
                     <span className="text-[10px] font-bold text-blue-700">
                       🚀 Boost {p.boost.toUpperCase()} (+{p.boost === "bronze" ? "5k" : p.boost === "prata" ? "10k" : "20k"})
                     </span>
                   )}
                 </div>
-                {p.bot && <span className="text-xs font-bold px-2 py-0.5 rounded-full text-white ml-auto" style={{ background: "#F58A1F" }}>🤖 IA</span>}
-                {game.host === p.id && <span className="text-xs font-bold px-2 py-0.5 rounded-full text-white ml-auto" style={{ background: "#0B3D2E" }}>anfitrião</span>}
-                {p.id === pid && <span className="text-xs opacity-60 ml-1">(você)</span>}
-                {p.bot && isHost && (
-                  <button onClick={() => removeBot(p.id)} className="ml-auto text-red-600 font-bold px-2" title="Remover IA">✕</button>
+                {p.bot ? (
+                  <>
+                    <span className="text-xs font-bold px-2 py-0.5 rounded-full text-white" style={{ background: "#F58A1F" }}>🤖 IA</span>
+                    {isHost && (
+                      <button onClick={() => removeBot(p.id)} className="text-red-600 font-bold px-2" title="Remover IA">✕</button>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    {p.ready ? (
+                      <span className="text-xs font-bold px-2 py-1 rounded-full text-white animate-pulse" style={{ background: "#15543E" }}>
+                        ✅ PRONTO
+                      </span>
+                    ) : (
+                      <span className="text-xs font-bold px-2 py-1 rounded-full" style={{ background: "#FDE68A", color: "#92400E" }}>
+                        ⏳ Aguardando
+                      </span>
+                    )}
+                  </>
                 )}
+                {game.host === p.id && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: "#E0E0E0", color: "#666" }}>HOST</span>}
               </div>
             ))}
             {isHost && game.players.length < 6 && (
@@ -1786,18 +1813,57 @@ export default function MagnataBrasilPremium() {
                 + Adicionar jogador IA 🤖
               </button>
             )}
-            {isHost ? (
+
+            {/* Botão "Estou Pronto" para jogadores humanos */}
+            {!game.players.find(p => p.id === pid)?.bot && (
               <button
-                onClick={startGame}
-                disabled={busy || game.players.length < 2}
-                className={`mb-btn w-full rounded-xl py-3 mt-4 font-bold text-white text-lg ${game.players.length < 2 ? "opacity-40" : "mb-pulse"}`}
-                style={{ background: "linear-gradient(160deg,#EE5050,#C22B2B)" }}
+                onClick={toggleReady}
+                disabled={busy}
+                className={`mb-btn w-full rounded-xl py-3 mt-3 font-bold text-white text-base transition-all ${game.players.find(p => p.id === pid)?.ready ? 'opacity-60' : 'mb-pulse'}`}
+                style={{ background: game.players.find(p => p.id === pid)?.ready ? "linear-gradient(160deg,#15543E,#0B3D2E)" : "linear-gradient(160deg,#F59E0B,#D97706)" }}
               >
-                {game.players.length < 2 ? "Adicione uma IA ou aguarde amigos…" : "Começar jogo"}
+                {game.players.find(p => p.id === pid)?.ready ? "✅ Você está pronto! (Clique para cancelar)" : "🎯 Marcar como PRONTO"}
               </button>
-            ) : (
-              <p className="text-center text-sm mt-4 opacity-70">Aguardando o anfitrião iniciar…</p>
             )}
+
+            {/* Aviso sobre boost */}
+            {!game.players.find(p => p.id === pid)?.ready && (
+              <p className="text-center text-xs mt-2 opacity-60 italic">
+                💡 Compre seu boost (se quiser) e clique em "PRONTO"
+              </p>
+            )}
+
+            {(() => {
+              const humanPlayers = game.players.filter(p => !p.bot);
+              const readyHumans = humanPlayers.filter(p => p.ready);
+              const allHumansReady = humanPlayers.length > 0 && humanPlayers.every(p => p.ready);
+
+              if (isHost) {
+                return (
+                  <>
+                    {humanPlayers.length > 0 && !allHumansReady && (
+                      <div className="mt-3 p-3 rounded-lg text-center text-xs font-semibold" style={{ background: "#FEF3C7", color: "#92400E" }}>
+                        ⏳ Aguardando {humanPlayers.length - readyHumans.length} jogador(es) marcar como PRONTO
+                      </div>
+                    )}
+                    <button
+                      onClick={startGame}
+                      disabled={busy || game.players.length < 2 || !allHumansReady}
+                      className={`mb-btn w-full rounded-xl py-3 mt-4 font-bold text-white text-lg ${(game.players.length < 2 || !allHumansReady) ? "opacity-40" : "mb-pulse"}`}
+                      style={{ background: "linear-gradient(160deg,#EE5050,#C22B2B)" }}
+                    >
+                      {game.players.length < 2 ? "Adicione jogadores para começar" : !allHumansReady ? "Aguardando todos marcarem PRONTO..." : "🎮 INICIAR PARTIDA"}
+                    </button>
+                  </>
+                );
+              } else {
+                return (
+                  <p className="text-center text-sm mt-4 opacity-70">
+                    {allHumansReady ? "✅ Todos prontos! Aguardando anfitrião iniciar..." : "⏳ Aguardando jogadores marcarem PRONTO..."}
+                  </p>
+                );
+              }
+            })()}
           </div>
           <button onClick={leaveToHome} className="block mx-auto mt-4 text-sm underline opacity-70">Sair da sala</button>
         </div>
