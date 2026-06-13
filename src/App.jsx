@@ -125,18 +125,26 @@ export default function App() {
     setUser(userData);
   };
 
-  const handleLogout = () => {
-    // Limpar localStorage
-    localStorage.removeItem("magnata_user_id");
-    localStorage.removeItem("magnata_user_name");
-    localStorage.removeItem("magnata_user_type");
+  const handleLogout = async () => {
+    try {
+      // Limpar sessão do Supabase se existir
+      if (supabase) {
+        await supabase.auth.signOut();
+      }
 
-    // Limpar sessão do Supabase se existir
-    if (supabase) {
-      supabase.auth.signOut();
+      // Limpar localStorage
+      localStorage.removeItem("magnata_user_id");
+      localStorage.removeItem("magnata_user_name");
+      localStorage.removeItem("magnata_user_type");
+
+      // Resetar estado do usuário
+      setUser(null);
+    } catch (error) {
+      console.error("Erro ao fazer logout:", error);
+      // Mesmo com erro, deslogar o usuário localmente
+      localStorage.clear();
+      setUser(null);
     }
-
-    setUser(null);
   };
 
   if (loading) {

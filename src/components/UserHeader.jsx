@@ -283,9 +283,13 @@ export default function UserHeader({ user, onLogout }) {
                 />
 
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     setShowMenu(false);
-                    onLogout();
+                    try {
+                      await onLogout();
+                    } catch (error) {
+                      console.error("Erro ao sair:", error);
+                    }
                   }}
                   style={{
                     width: "100%",
