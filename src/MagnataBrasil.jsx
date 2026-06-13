@@ -191,6 +191,22 @@ function addLog(g, msg) {
   g.log = [msg, ...(g.log || [])].slice(0, 14);
 }
 
+function checkVictoryCondition(g) {
+  // Jogadores ativos: não falidos E não abandonaram
+  const active = g.players.filter((p) => !p.bankrupt && !p.abandoned);
+
+  if (active.length === 1) {
+    g.status = "ended";
+    g.winner = g.players.findIndex((p) => !p.bankrupt && !p.abandoned);
+    addLog(g, `🏆 ${active[0].name} venceu a partida!`);
+  } else if (active.length === 0) {
+    // Todos faliram ou saíram - jogo termina sem vencedor
+    g.status = "ended";
+    g.winner = -1;
+    addLog(g, `🏁 Partida encerrada. Nenhum jogador restante.`);
+  }
+}
+
 function doBankrupt(g, pi) {
   const p = g.players[pi];
   p.bankrupt = true;
@@ -212,12 +228,7 @@ function doBankrupt(g, pi) {
   if (g.debt && g.debt.who === pi) g.debt = null;
   if (g.trade && (g.trade.from === pi || g.trade.to === pi)) g.trade = null;
   addLog(g, `💥 ${p.name} faliu! Seus bens voltaram ao jogo${mantidas > 0 ? " (construções mantidas — quem cair pode comprar pelo valor investido)" : ""}.`);
-  const act = g.players.filter((x) => !x.bankrupt);
-  if (act.length === 1) {
-    g.status = "ended";
-    g.winner = g.players.findIndex((x) => !x.bankrupt);
-    addLog(g, `🏆 ${act[0].name} venceu a partida!`);
-  }
+  checkVictoryCondition(g);
   if (g.status !== "ended" && g.currentTurn === pi) {
     g.turn = { phase: "roll", doubles: 0, canBuy: null };
     let n = g.currentTurn;
@@ -823,6 +834,14 @@ export default function MagnataBrasilPremium() {
       const g = await loadGame(game.code);
       const cur = gameRef.current;
       if (g && cur && g.v > cur.v) {
+        // Verificar se o jogador foi kickado
+        const me = g.players.find((p) => p.id === pid);
+        if (me && me.kicked) {
+          alert("Você foi removido da sala pelo host.");
+          leaveToHome();
+          return;
+        }
+
         setGame(g);
         if (g.status === "playing" && screen === "lobby") setScreen("game");
       }
@@ -991,7 +1010,7 @@ export default function MagnataBrasilPremium() {
       v: 0,
       status: "lobby",
       host: pid,
-      players: [{ id: pid, name: name.trim(), token: tokenIdx, pos: 0, money: START_MONEY, inJail: false, jailTurns: 0, bankrupt: false, ready: false }],
+      players: [{ id: pid, name: name.trim(), token: tokenIdx, pos: 0, money: START_MONEY, inJail: false, jailTurns: 0, bankrupt: false, abandoned: false, ready: false }],
       props: {},
       currentTurn: 0,
       turn: { phase: "roll", doubles: 0, canBuy: null },
@@ -1050,7 +1069,7 @@ export default function MagnataBrasilPremium() {
         const taken = g.players.map((p) => p.token);
         let tk = tokenIdx;
         while (taken.includes(tk)) tk = (tk + 1) % TOKENS.length;
-        g.players.push({ id: pid, name: name.trim(), token: tk, pos: 0, money: START_MONEY, inJail: false, jailTurns: 0, bankrupt: false, ready: false });
+        g.players.push({ id: pid, name: name.trim(), token: tk, pos: 0, money: START_MONEY, inJail: false, jailTurns: 0, bankrupt: false, abandoned: false, ready: false });
         addLog(g, `${name.trim()} entrou na sala.`);
 
         await saveGame(g);
@@ -1100,7 +1119,7 @@ export default function MagnataBrasilPremium() {
       const used = g.players.map((p) => p.name);
       const nm = BOT_NAMES.find((n) => !used.includes(n)) || "Robô " + (g.players.length + 1);
       // Bots não precisam marcar como pronto - ignoram o sistema de ready
-      g.players.push({ id: "bot" + Math.random().toString(36).slice(2, 8), bot: true, name: nm, token: tk, pos: 0, money: START_MONEY, inJail: false, jailTurns: 0, bankrupt: false, ready: true });
+      g.players.push({ id: "bot" + Math.random().toString(36).slice(2, 8), bot: true, name: nm, token: tk, pos: 0, money: START_MONEY, inJail: false, jailTurns: 0, bankrupt: false, abandoned: false, ready: true });
       addLog(g, `🤖 ${nm} entrou na sala.`);
     });
 
@@ -1108,6 +1127,16 @@ export default function MagnataBrasilPremium() {
     act((g) => {
       if (g.status !== "lobby") return;
       g.players = g.players.filter((p) => p.id !== id);
+    });
+
+  const kickPlayer = (playerId, playerName) =>
+    act((g) => {
+      if (g.status !== "lobby") return;
+      const idx = g.players.findIndex((p) => p.id === playerId);
+      if (idx !== -1) {
+        g.players[idx].kicked = true;
+        addLog(g, `🚪 ${playerName} foi removido da sala pelo host.`);
+      }
     });
 
   const toggleReady = () =>
@@ -1119,6 +1148,18 @@ export default function MagnataBrasilPremium() {
     });
 
   const leaveToHome = async () => {
+    // Se está em jogo ativo, marcar como abandonou
+    if (game && game.status === "playing") {
+      await act((g) => {
+        const myIdx = g.players.findIndex((p) => p.id === pid);
+        if (myIdx >= 0 && !g.players[myIdx].bankrupt) {
+          g.players[myIdx].abandoned = true;
+          addLog(g, `🚪 ${g.players[myIdx].name} saiu da partida.`);
+          checkVictoryCondition(g);
+        }
+      });
+    }
+
     try {
       await window.storage.set("magnata3:last", "");
     } catch (e) {}
@@ -1837,6 +1878,19 @@ export default function MagnataBrasilPremium() {
                   </>
                 )}
                 {game.host === p.id && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: "#E0E0E0", color: "#666" }}>HOST</span>}
+                {isHost && p.id !== pid && !p.bot && (
+                  <button
+                    onClick={() => {
+                      if (confirm(`Remover ${p.name} da sala?`)) {
+                        kickPlayer(p.id, p.name);
+                      }
+                    }}
+                    className="text-red-600 font-bold px-2 hover:text-red-800"
+                    title="Remover jogador"
+                  >
+                    ❌
+                  </button>
+                )}
               </div>
             ))}
             {isHost && game.players.length < 6 && (
