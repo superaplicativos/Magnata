@@ -623,12 +623,12 @@ function Scene({ i, big }) {
 /* ============================================================
    COMPONENTE PRINCIPAL
    ============================================================ */
-export default function MagnataBrasilPremium() {
-  const [screen, setScreen] = useState("home");
-  const [pid, setPid] = useState(null);
-  const [name, setName] = useState("");
+export default function MagnataBrasilPremium({ userId, userName, initialGameCode, onBackToMenu }) {
+  const [screen, setScreen] = useState(initialGameCode ? "join" : "home");
+  const [pid, setPid] = useState(userId || null);
+  const [name, setName] = useState(userName || "");
   const [tokenIdx, setTokenIdx] = useState(0);
-  const [joinCode, setJoinCode] = useState("");
+  const [joinCode, setJoinCode] = useState(initialGameCode || "");
   const [game, setGame] = useState(null);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
@@ -785,6 +785,17 @@ export default function MagnataBrasilPremium() {
     window.addEventListener("pointerdown", unlock, { once: true });
     return () => window.removeEventListener("pointerdown", unlock);
   }, []);
+
+  /* auto-join quando inicializado com código */
+  useEffect(() => {
+    if (initialGameCode && screen === "join" && !game && !busy) {
+      console.log("🎮 Auto-join com código:", initialGameCode);
+      // Pequeno delay para garantir que o estado está pronto
+      setTimeout(() => {
+        joinGame();
+      }, 100);
+    }
+  }, [initialGameCode, screen]);
 
   /* identidade persistente + reconexão + leitura de código na URL */
   useEffect(() => {

@@ -165,7 +165,14 @@ export default function GameRouter({ userId, userName }) {
 
   // Tela do Jogo (MagnataBrasil original)
   if (currentScreen === "game") {
-    return <MagnataBrasil userId={userId} userName={userName} />;
+    return (
+      <MagnataBrasil
+        userId={userId}
+        userName={userName}
+        initialGameCode={gameCode}
+        onBackToMenu={handleBackToMenu}
+      />
+    );
   }
 
   return null;
