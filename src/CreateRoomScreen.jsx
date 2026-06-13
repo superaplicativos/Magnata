@@ -80,6 +80,23 @@ export default function CreateRoomScreen({ userId, userName, onBack, onRoomCreat
         }
 
         console.log("Sala criada no DB:", matchData);
+
+        // Adicionar o host como primeiro jogador na tabela match_players
+        const { error: playerError } = await supabase
+          .from("match_players")
+          .insert({
+            match_id: matchData.id,
+            user_id: userId,
+            player_name: userName,
+            token: "hat", // Token padrão inicial
+          });
+
+        if (playerError) {
+          console.error("Erro ao adicionar host como jogador:", playerError);
+          // Não vamos bloquear a criação da sala por isso
+        } else {
+          console.log("Host adicionado como jogador na sala");
+        }
       }
 
       // Criar objeto do jogo no formato esperado pelo MagnataBrasil.jsx
