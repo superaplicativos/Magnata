@@ -48,6 +48,9 @@ export default function PublicRoomsScreen({ onBack, onJoinRoom }) {
 
   const loadPublicRooms = async () => {
     try {
+      console.log("🔍 Buscando salas públicas...");
+      console.log("Supabase conectado:", !!supabase);
+
       const { data, error } = await supabase
         .from("matches")
         .select(`
@@ -67,13 +70,16 @@ export default function PublicRoomsScreen({ onBack, onJoinRoom }) {
         .order("created_at", { ascending: false });
 
       if (error) {
-        console.error("Erro ao carregar salas:", error);
+        console.error("❌ Erro ao carregar salas:", error);
+        console.error("Detalhes do erro:", JSON.stringify(error, null, 2));
         setRooms([]);
       } else {
+        console.log("✅ Salas carregadas:", data);
+        console.log("Total de salas encontradas:", data?.length || 0);
         setRooms(data || []);
       }
     } catch (err) {
-      console.error("Erro ao carregar salas:", err);
+      console.error("❌ Erro inesperado ao carregar salas:", err);
     } finally {
       setLoading(false);
     }

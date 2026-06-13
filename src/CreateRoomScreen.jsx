@@ -56,6 +56,15 @@ export default function CreateRoomScreen({ userId, userName, onBack, onRoomCreat
 
       // Criar registro na tabela matches (se Supabase configurado)
       if (supabase) {
+        console.log("🎲 Criando sala no Supabase...");
+        console.log("Dados da sala:", {
+          room_code: roomCode,
+          room_name: roomName.trim(),
+          host_id: userId,
+          is_public: isPublic,
+          max_players: maxPlayers,
+        });
+
         const { data: matchData, error: matchError } = await supabase
           .from("matches")
           .insert({
@@ -73,15 +82,17 @@ export default function CreateRoomScreen({ userId, userName, onBack, onRoomCreat
           .single();
 
         if (matchError) {
-          console.error("Erro ao criar match:", matchError);
+          console.error("❌ Erro ao criar match:", matchError);
+          console.error("Detalhes:", JSON.stringify(matchError, null, 2));
           setError("Erro ao criar sala no banco. Verifique se as tabelas existem.");
           setLoading(false);
           return;
         }
 
-        console.log("Sala criada no DB:", matchData);
+        console.log("✅ Sala criada no DB:", matchData);
 
         // Adicionar o host como primeiro jogador na tabela match_players
+        console.log("👤 Adicionando host como jogador...");
         const { error: playerError } = await supabase
           .from("match_players")
           .insert({
@@ -92,11 +103,14 @@ export default function CreateRoomScreen({ userId, userName, onBack, onRoomCreat
           });
 
         if (playerError) {
-          console.error("Erro ao adicionar host como jogador:", playerError);
+          console.error("❌ Erro ao adicionar host como jogador:", playerError);
+          console.error("Detalhes:", JSON.stringify(playerError, null, 2));
           // Não vamos bloquear a criação da sala por isso
         } else {
-          console.log("Host adicionado como jogador na sala");
+          console.log("✅ Host adicionado como jogador na sala");
         }
+      } else {
+        console.warn("⚠️ Supabase não configurado - sala criada apenas localmente");
       }
 
       // Criar objeto do jogo no formato esperado pelo MagnataBrasil.jsx
