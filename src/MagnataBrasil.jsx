@@ -623,8 +623,8 @@ function Scene({ i, big }) {
 /* ============================================================
    COMPONENTE PRINCIPAL
    ============================================================ */
-export default function MagnataBrasilPremium({ userId, userName, initialGameCode, onBackToMenu }) {
-  const [screen, setScreen] = useState(initialGameCode ? "join" : "home");
+export default function MagnataBrasilPremium({ userId, userName, initialGameCode, onBackToMenu, isRoomCreator }) {
+  const [screen, setScreen] = useState(initialGameCode ? "loading" : "home");
   const [pid, setPid] = useState(userId || null);
   const [name, setName] = useState(userName || "");
   const [tokenIdx, setTokenIdx] = useState(0);
@@ -786,16 +786,87 @@ export default function MagnataBrasilPremium({ userId, userName, initialGameCode
     return () => window.removeEventListener("pointerdown", unlock);
   }, []);
 
-  /* auto-join quando inicializado com código */
+  /* auto-join ou auto-create quando inicializado com código */
   useEffect(() => {
-    if (initialGameCode && screen === "join" && !game && !busy) {
-      console.log("🎮 Auto-join com código:", initialGameCode);
-      // Pequeno delay para garantir que o estado está pronto
-      setTimeout(() => {
-        joinGame();
-      }, 100);
-    }
-  }, [initialGameCode, screen]);
+    if (!initialGameCode || screen !== "loading") return;
+
+    let mounted = true;
+    console.log("🎮 Inicializando com código:", initialGameCode);
+
+    const initializeGame = async () => {
+      try {
+        // Tenta carregar o jogo primeiro
+        const g = await loadGame(initialGameCode);
+
+        if (!mounted) return;
+
+        if (g) {
+          // Jogo existe, tentar entrar
+          console.log("✅ Jogo encontrado, entrando...");
+          const existing = g.players.find((p) => p.id === pid);
+
+          if (existing) {
+            // Já está no jogo
+            setGame(g);
+            setScreen(g.status === "lobby" ? "lobby" : "game");
+          } else {
+            // Precisa entrar no jogo
+            setJoinCode(initialGameCode);
+            setScreen("join");
+            setTimeout(() => {
+              if (mounted) joinGame();
+            }, 100);
+          }
+        } else {
+          // Jogo não existe, criar novo
+          console.log("📝 Jogo não existe, criando novo...");
+          const newGame = {
+            code: initialGameCode,
+            v: 0,
+            status: "lobby",
+            host: pid,
+            players: [{
+              id: pid,
+              name: name || userName,
+              token: tokenIdx,
+              pos: 0,
+              money: START_MONEY,
+              inJail: false,
+              jailTurns: 0,
+              bankrupt: false,
+              abandoned: false,
+              ready: false
+            }],
+            props: {},
+            currentTurn: 0,
+            turn: { phase: "roll", doubles: 0, canBuy: null },
+            dice: null,
+            log: [],
+            lastCard: null,
+            trade: null,
+          };
+
+          await saveGame(newGame);
+          if (mounted) {
+            setGame(newGame);
+            setScreen("lobby");
+          }
+        }
+      } catch (error) {
+        console.error("❌ Erro ao inicializar jogo:", error);
+        if (mounted) {
+          setErr("Erro ao carregar sala. Tente novamente.");
+          setScreen("home");
+        }
+      }
+    };
+
+    initializeGame();
+
+    return () => {
+      mounted = false;
+    };
+  }, [initialGameCode]);
 
   /* identidade persistente + reconexão + leitura de código na URL */
   useEffect(() => {
@@ -1174,6 +1245,13 @@ export default function MagnataBrasilPremium({ userId, userName, initialGameCode
     try {
       await window.storage.set("magnata3:last", "");
     } catch (e) {}
+
+    // Se tem callback de voltar ao menu (vindo do GameRouter), usar ele
+    if (onBackToMenu) {
+      console.log("🔙 Voltando ao menu principal");
+      onBackToMenu();
+      return;
+    }
     setGame(null);
     setScreen("home");
   };
