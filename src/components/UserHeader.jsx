@@ -196,83 +196,70 @@ export default function UserHeader({ user, onLogout }) {
                   </div>
                 )}
 
+                {/* BOTÕES DESABILITADOS TEMPORARIAMENTE - Evitar confusão do usuário
                 <button
                   onClick={() => {
                     setShowMenu(false);
-                    // TODO: Navegar para perfil
+                    alert("Em desenvolvimento");
                   }}
+                  disabled
                   style={{
                     width: "100%",
                     padding: "10px 16px",
                     background: "none",
                     border: "none",
                     textAlign: "left",
-                    cursor: "pointer",
+                    cursor: "not-allowed",
                     fontSize: "14px",
-                    color: "#333",
-                    transition: "background 0.2s",
-                  }}
-                  onMouseOver={(e) => {
-                    e.currentTarget.style.background = "#f5f5f5";
-                  }}
-                  onMouseOut={(e) => {
-                    e.currentTarget.style.background = "none";
+                    color: "#999",
+                    opacity: 0.5,
                   }}
                 >
-                  👤 Meu Perfil
+                  👤 Meu Perfil (em breve)
                 </button>
 
                 <button
                   onClick={() => {
                     setShowMenu(false);
-                    // TODO: Navegar para ranking
+                    alert("Em desenvolvimento");
                   }}
+                  disabled
                   style={{
                     width: "100%",
                     padding: "10px 16px",
                     background: "none",
                     border: "none",
                     textAlign: "left",
-                    cursor: "pointer",
+                    cursor: "not-allowed",
                     fontSize: "14px",
-                    color: "#333",
-                    transition: "background 0.2s",
-                  }}
-                  onMouseOver={(e) => {
-                    e.currentTarget.style.background = "#f5f5f5";
-                  }}
-                  onMouseOut={(e) => {
-                    e.currentTarget.style.background = "none";
+                    color: "#999",
+                    opacity: 0.5,
                   }}
                 >
-                  🏆 Ranking
+                  🏆 Ranking (em breve)
                 </button>
 
                 <button
                   onClick={() => {
                     setShowMenu(false);
-                    // TODO: Navegar para histórico
+                    alert("Em desenvolvimento");
                   }}
+                  disabled
                   style={{
                     width: "100%",
                     padding: "10px 16px",
                     background: "none",
                     border: "none",
                     textAlign: "left",
-                    cursor: "pointer",
+                    cursor: "not-allowed",
                     fontSize: "14px",
-                    color: "#333",
-                    transition: "background 0.2s",
-                  }}
-                  onMouseOver={(e) => {
-                    e.currentTarget.style.background = "#f5f5f5";
-                  }}
-                  onMouseOut={(e) => {
-                    e.currentTarget.style.background = "none";
+                    color: "#999",
+                    opacity: 0.5,
                   }}
                 >
-                  📊 Meu Histórico
+                  📊 Meu Histórico (em breve)
                 </button>
+                */}
 
                 <div
                   style={{

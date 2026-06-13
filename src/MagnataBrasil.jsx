@@ -792,35 +792,21 @@ export default function MagnataBrasilPremium({ userId, userName, initialGameCode
 
     let mounted = true;
     console.log("🎮 Inicializando com código:", initialGameCode);
+    console.log("   pid:", pid);
+    console.log("   name:", name || userName);
 
     const initializeGame = async () => {
       try {
         // Tenta carregar o jogo primeiro
-        const g = await loadGame(initialGameCode);
+        let g = await loadGame(initialGameCode);
+        console.log("📦 loadGame retornou:", g ? "ENCONTRADO" : "NÃO ENCONTRADO");
 
         if (!mounted) return;
 
-        if (g) {
-          // Jogo existe, tentar entrar
-          console.log("✅ Jogo encontrado, entrando...");
-          const existing = g.players.find((p) => p.id === pid);
-
-          if (existing) {
-            // Já está no jogo
-            setGame(g);
-            setScreen(g.status === "lobby" ? "lobby" : "game");
-          } else {
-            // Precisa entrar no jogo
-            setJoinCode(initialGameCode);
-            setScreen("join");
-            setTimeout(() => {
-              if (mounted) joinGame();
-            }, 100);
-          }
-        } else {
-          // Jogo não existe, criar novo
-          console.log("📝 Jogo não existe, criando novo...");
-          const newGame = {
+        if (!g) {
+          // Jogo não existe localmente, criar novo
+          console.log("📝 Criando novo jogo local...");
+          g = {
             code: initialGameCode,
             v: 0,
             status: "lobby",
@@ -846,10 +832,31 @@ export default function MagnataBrasilPremium({ userId, userName, initialGameCode
             trade: null,
           };
 
-          await saveGame(newGame);
+          const saved = await saveGame(g);
+          console.log("💾 Jogo salvo:", saved ? "SIM" : "NÃO");
+
           if (mounted) {
-            setGame(newGame);
+            setGame(saved);
             setScreen("lobby");
+          }
+        } else {
+          // Jogo existe, verificar se jogador já está nele
+          console.log("✅ Jogo encontrado!");
+          const existing = g.players.find((p) => p.id === pid);
+
+          if (existing) {
+            // Já está no jogo
+            console.log("👤 Jogador já está no jogo");
+            setGame(g);
+            setScreen(g.status === "lobby" ? "lobby" : "game");
+          } else {
+            // Precisa entrar no jogo
+            console.log("👥 Jogador precisa entrar no jogo");
+            setJoinCode(initialGameCode);
+            setScreen("join");
+            setTimeout(() => {
+              if (mounted) joinGame();
+            }, 100);
           }
         }
       } catch (error) {
