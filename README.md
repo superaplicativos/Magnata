@@ -1,6 +1,6 @@
 # 🇺🇸 Magnata Brasil Premium
 
-An online multiplayer business and property trading game inspired by classic real-estate board games, built for the web and designed for real-time matches between friends and communities.
+An online multiplayer business and property trading game inspired by classic real-estate board games like Monopoly and Banco Imobiliário, built for the web and designed for real-time matches between friends and communities.
 
 The goal is not simply to recreate a traditional board game experience, but to build a modern platform focused on economic strategy, negotiation, asset management and online competition.
 
