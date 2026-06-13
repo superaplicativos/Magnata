@@ -640,6 +640,94 @@ export default function MagnataBrasilPremium() {
   const [chatTo, setChatTo] = useState("all");
   const [nowTs, setNowTs] = useState(Date.now());
   const [autoPlay, setAutoPlay] = useState(false);
+  const [pixModal, setPixModal] = useState({ show: false, boost: null, amount: 0, bonus: 0, qrCode: null, qrCodeBase64: null, id: null, status: 'pending', simulation: false });
+  
+  const handleSelectBoost = async (boostId) => {
+    const prices = { bronze: 0.10, prata: 0.20, ouro: 0.30 };
+    const bonuses = { bronze: 5000, prata: 10000, ouro: 20000 };
+    
+    setBusy(true);
+    try {
+      const myName = name || "Jogador";
+      const response = await fetch("/api/create-pix", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ boost: boostId, playerName: myName, playerId: pid }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Erro na API Mercado Pago");
+      }
+
+      const data = await response.json();
+      setPixModal({
+        show: true,
+        boost: boostId,
+        amount: prices[boostId],
+        bonus: bonuses[boostId],
+        qrCode: data.qr_code,
+        qrCodeBase64: data.qr_code_base64,
+        id: data.id,
+        status: "pending",
+        simulation: false
+      });
+    } catch (e) {
+      console.warn("Falha ao gerar PIX real (talvez sem chaves do Mercado Pago). Ativando simulação para testes.", e);
+      setPixModal({
+        show: true,
+        boost: boostId,
+        amount: prices[boostId],
+        bonus: bonuses[boostId],
+        qrCode: "00020101021243650016com.mercadopago01363360225f-30b6-4558-b840-2443d00014cf5204000053039865802BR5908MUSEUPIX6009SAOPAULO620705030106304CA7F",
+        qrCodeBase64: null,
+        id: "sim-" + Math.random().toString(36).slice(2, 10),
+        status: "pending",
+        simulation: true
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const simulatePixPayment = () => {
+    confirmBoostPayment(pixModal.boost);
+  };
+
+  const confirmBoostPayment = (boostId) => {
+    act((g) => {
+      const idx = g.players.findIndex((p) => p.id === pid);
+      if (idx !== -1) {
+        g.players[idx].boost = boostId;
+        addLog(g, `🚀 ${g.players[idx].name} adquiriu o Boost ${boostId.toUpperCase()}!`);
+      }
+    });
+    setPixModal(prev => ({ ...prev, show: false }));
+    if (typeof SFX !== "undefined" && SFX.coin) SFX.coin();
+  };
+
+  // Efeito de polling para verificar pagamentos reais aprovados
+  useEffect(() => {
+    if (!pixModal.show || !pixModal.id || pixModal.simulation) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const response = await fetch(`/api/check-pix?id=${pixModal.id}`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.status === "approved") {
+            clearInterval(interval);
+            confirmBoostPayment(pixModal.boost);
+            alert(`Pagamento aprovado! Seu Boost ${pixModal.boost.toUpperCase()} foi ativado com sucesso. 🚀`);
+          }
+        }
+      } catch (err) {
+        console.error("Erro no polling do PIX:", err);
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [pixModal.show, pixModal.id, pixModal.simulation]);
+
   const hopTimers = useRef({});
   const prevGameRef = useRef(null);
   const prevChatLen = useRef(0);
@@ -662,9 +750,16 @@ export default function MagnataBrasilPremium() {
     return () => window.removeEventListener("pointerdown", unlock);
   }, []);
 
-  /* identidade persistente + reconexão */
+  /* identidade persistente + reconexão + leitura de código na URL */
   useEffect(() => {
     (async () => {
+      // Lê parâmetro "sala" da URL se houver
+      const urlParams = new URLSearchParams(window.location.search);
+      const roomParam = urlParams.get("sala") || urlParams.get("room");
+      if (roomParam) {
+        setJoinCode(roomParam.toUpperCase().slice(0, 4));
+      }
+
       let id = null;
       try {
         const r = await window.storage.get("magnata:pid");
@@ -677,22 +772,28 @@ export default function MagnataBrasilPremium() {
         } catch (e) {}
       }
       setPid(id);
-      try {
-        const last = await window.storage.get("magnata3:last");
-        if (last && last.value) {
-          const g = await loadGame(last.value);
-          if (g && g.players.some((p) => p.id === id) && g.status !== "ended") {
-            setGame(g);
-            setScreen(g.status === "lobby" ? "lobby" : "game");
+
+      // Só tenta reconectar se não houver um parâmetro de sala na URL (para evitar prender em salas velhas)
+      if (!roomParam) {
+        try {
+          const last = await window.storage.get("magnata3:last");
+          if (last && last.value) {
+            const g = await loadGame(last.value);
+            if (g && g.players.some((p) => p.id === id) && g.status !== "ended") {
+              setGame(g);
+              setScreen(g.status === "lobby" ? "lobby" : "game");
+            }
           }
-        }
-      } catch (e) {}
+        } catch (e) {}
+      }
     })();
   }, []);
 
   /* polling do jogo */
   useEffect(() => {
     if (!game || !game.code) return;
+    // Polling mais frequente no lobby (1s) para sincronização rápida de jogadores
+    const interval = screen === "lobby" ? 1000 : 2500;
     const t = setInterval(async () => {
       const g = await loadGame(game.code);
       const cur = gameRef.current;
@@ -700,7 +801,7 @@ export default function MagnataBrasilPremium() {
         setGame(g);
         if (g.status === "playing" && screen === "lobby") setScreen("game");
       }
-    }, 2500);
+    }, interval);
     return () => clearInterval(t);
   }, [game && game.code, screen]);
 
@@ -889,41 +990,62 @@ export default function MagnataBrasilPremium() {
     if (!code) return setErr("Digite o código da sala.");
     setErr("");
     setBusy(true);
-    const g = await loadGame(code);
-    if (!g) {
-      setBusy(false);
-      return setErr("Partida não encontrada. Confira o código.");
-    }
-    const existing = g.players.find((p) => p.id === pid);
-    if (existing) {
-      setGame(g);
-      setScreen(g.status === "lobby" ? "lobby" : "game");
+
+    // Retry logic para evitar race conditions
+    let retries = 3;
+    while (retries > 0) {
       try {
-        await window.storage.set("magnata3:last", code);
-      } catch (e) {}
-      setBusy(false);
-      return;
+        // Carrega a versão mais recente do jogo
+        const g = await loadGame(code);
+        if (!g) {
+          setBusy(false);
+          return setErr("Partida não encontrada. Confira o código.");
+        }
+
+        const existing = g.players.find((p) => p.id === pid);
+        if (existing) {
+          setGame(g);
+          setScreen(g.status === "lobby" ? "lobby" : "game");
+          try {
+            await window.storage.set("magnata3:last", code);
+          } catch (e) {}
+          setBusy(false);
+          return;
+        }
+
+        if (g.status !== "lobby") {
+          setBusy(false);
+          return setErr("Essa partida já começou.");
+        }
+        if (g.players.length >= 6) {
+          setBusy(false);
+          return setErr("Sala cheia (máx. 6 jogadores).");
+        }
+
+        const taken = g.players.map((p) => p.token);
+        let tk = tokenIdx;
+        while (taken.includes(tk)) tk = (tk + 1) % TOKENS.length;
+        g.players.push({ id: pid, name: name.trim(), token: tk, pos: 0, money: START_MONEY, inJail: false, jailTurns: 0, bankrupt: false });
+        addLog(g, `${name.trim()} entrou na sala.`);
+
+        await saveGame(g);
+        try {
+          await window.storage.set("magnata3:last", code);
+        } catch (e) {}
+        setGame(g);
+        setScreen("lobby");
+        setBusy(false);
+        return;
+      } catch (e) {
+        console.error("Erro ao entrar no jogo, tentando novamente...", e);
+        retries--;
+        if (retries === 0) {
+          setBusy(false);
+          return setErr("Erro ao entrar na partida. Tente novamente.");
+        }
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
     }
-    if (g.status !== "lobby") {
-      setBusy(false);
-      return setErr("Essa partida já começou.");
-    }
-    if (g.players.length >= 6) {
-      setBusy(false);
-      return setErr("Sala cheia (máx. 6 jogadores).");
-    }
-    const taken = g.players.map((p) => p.token);
-    let tk = tokenIdx;
-    while (taken.includes(tk)) tk = (tk + 1) % TOKENS.length;
-    g.players.push({ id: pid, name: name.trim(), token: tk, pos: 0, money: START_MONEY, inJail: false, jailTurns: 0, bankrupt: false });
-    addLog(g, `${name.trim()} entrou na sala.`);
-    await saveGame(g);
-    try {
-      await window.storage.set("magnata3:last", code);
-    } catch (e) {}
-    setGame(g);
-    setScreen("lobby");
-    setBusy(false);
   };
 
   const startGame = () =>
@@ -931,6 +1053,16 @@ export default function MagnataBrasilPremium() {
       g.status = "playing";
       g.currentTurn = 0;
       g.turn = { phase: "roll", doubles: 0, canBuy: null };
+      
+      // Aplica bônus de boost na grana inicial de cada jogador
+      g.players = g.players.map((p) => {
+        let initialMoney = START_MONEY;
+        if (p.boost === "bronze") initialMoney += 5000;
+        else if (p.boost === "prata") initialMoney += 10000;
+        else if (p.boost === "ouro") initialMoney += 20000;
+        return { ...p, money: initialMoney };
+      });
+
       addLog(g, `🎲 Partida iniciada! Vez de ${g.players[0].name}.`);
     });
 
@@ -1553,10 +1685,79 @@ export default function MagnataBrasilPremium() {
         <div className="w-full max-w-md">
           <div className="text-center mb-5">
             <div className="flex justify-center"><Logo w={170} dark /></div>
-            <p className="text-sm opacity-80 mt-1">Compartilhe o código com seus amigos</p>
-            <div className="mb-mono text-6xl font-bold tracking-widest mt-3 rounded-2xl py-4" style={{ background: "rgba(0,0,0,.25)", color: "#FBF5E9" }}>
+            <p className="text-sm opacity-80 mt-1">Compartilhe com seus amigos</p>
+            <div className="mb-mono text-6xl font-bold tracking-widest mt-2 rounded-2xl py-3" style={{ background: "rgba(0,0,0,.25)", color: "#FBF5E9" }}>
               {game.code}
             </div>
+            <button
+              onClick={() => {
+                const link = `${window.location.origin}${window.location.pathname}?sala=${game.code}`;
+                navigator.clipboard.writeText(link);
+                const btn = document.getElementById("copy-link-btn");
+                if (btn) {
+                  const oldText = btn.innerHTML;
+                  btn.innerHTML = "Copiado! 📋";
+                  btn.style.background = "#15543E";
+                  setTimeout(() => {
+                    btn.innerHTML = oldText;
+                    btn.style.background = "rgba(255,255,255,0.12)";
+                  }, 2000);
+                }
+              }}
+              id="copy-link-btn"
+              className="mt-2 text-xs font-bold px-4 py-2 rounded-lg transition-all"
+              style={{ background: "rgba(255,255,255,0.12)", color: "#FBF5E9" }}
+            >
+              Copiar Link de Convite 🔗
+            </button>
+          </div>
+
+          {/* PAINEL DE BOOSTS */}
+          <div className="rounded-2xl p-4 mb-4" style={{ background: "linear-gradient(135deg, #1E3A8A, #3B82F6)", color: "#FFF" }}>
+            <h3 className="font-bold text-sm text-center mb-2">🚀 ADQUIRIR VANTAGEM NO JOGO (BOOST PIX)</h3>
+            <p className="text-xs opacity-90 text-center mb-3">Compre um boost opcional para começar a partida com mais dinheiro!</p>
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { id: "bronze", name: "Bronze", price: "R$ 0,10", bonus: "+R$ 5.000", bg: "linear-gradient(135deg, #A77044, #734A26)" },
+                { id: "prata", name: "Prata", price: "R$ 0,20", bonus: "+R$ 10.000", bg: "linear-gradient(135deg, #DCE2E7, #8A95A5)" },
+                { id: "ouro", name: "Ouro", price: "R$ 0,30", bonus: "+R$ 20.000", bg: "linear-gradient(135deg, #F9D04F, #D29B12)" },
+              ].map((b) => {
+                const myPlayerObj = game.players.find(p => p.id === pid);
+                const hasThisBoost = myPlayerObj && myPlayerObj.boost === b.id;
+                return (
+                  <button
+                    key={b.id}
+                    onClick={() => handleSelectBoost(b.id)}
+                    disabled={busy}
+                    className="flex flex-col items-center justify-between p-2 rounded-xl text-center border-2 transition-all relative overflow-hidden"
+                    style={{
+                      background: b.bg,
+                      borderColor: hasThisBoost ? "#FFF" : "transparent",
+                      boxShadow: hasThisBoost ? "0 0 12px rgba(255,255,255,0.8)" : "none",
+                      transform: hasThisBoost ? "scale(1.05)" : "scale(1)",
+                    }}
+                  >
+                    <span className="font-bold text-xs uppercase tracking-wider">{b.name}</span>
+                    <span className="text-[10px] opacity-80 mt-0.5">{b.price}</span>
+                    <span className="font-extrabold text-xs mt-1">{b.bonus}</span>
+                    {hasThisBoost && (
+                      <span className="absolute top-1 right-1 text-[10px]">✅</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            {(() => {
+              const myPlayerObj = game.players.find(p => p.id === pid);
+              if (myPlayerObj && myPlayerObj.boost) {
+                return (
+                  <p className="text-center text-xs font-bold mt-2 text-yellow-300">
+                    Você ativou o Boost {myPlayerObj.boost.toUpperCase()}! Começará com +R$ {myPlayerObj.boost === "bronze" ? "5.000" : myPlayerObj.boost === "prata" ? "10.000" : "20.000"}.
+                  </p>
+                );
+              }
+              return null;
+            })()}
           </div>
 
           <div className="rounded-2xl p-5" style={{ background: "#FBF5E9", color: "#1A1A1A" }}>
@@ -1564,10 +1765,17 @@ export default function MagnataBrasilPremium() {
             {game.players.map((p) => (
               <div key={p.id} className="flex items-center gap-3 py-2 border-b border-gray-200 last:border-0">
                 <span className="text-2xl">{TOKENS[p.token]}</span>
-                <span className="font-bold">{p.name}</span>
-                {p.bot && <span className="text-xs font-bold px-2 py-0.5 rounded-full text-white" style={{ background: "#F58A1F" }}>🤖 IA</span>}
-                {game.host === p.id && <span className="text-xs font-bold px-2 py-0.5 rounded-full text-white" style={{ background: "#0B3D2E" }}>anfitrião</span>}
-                {p.id === pid && <span className="text-xs opacity-60">(você)</span>}
+                <div className="flex flex-col">
+                  <span className="font-bold">{p.name}</span>
+                  {p.boost && (
+                    <span className="text-[10px] font-bold text-blue-700">
+                      🚀 Boost {p.boost.toUpperCase()} (+{p.boost === "bronze" ? "5k" : p.boost === "prata" ? "10k" : "20k"})
+                    </span>
+                  )}
+                </div>
+                {p.bot && <span className="text-xs font-bold px-2 py-0.5 rounded-full text-white ml-auto" style={{ background: "#F58A1F" }}>🤖 IA</span>}
+                {game.host === p.id && <span className="text-xs font-bold px-2 py-0.5 rounded-full text-white ml-auto" style={{ background: "#0B3D2E" }}>anfitrião</span>}
+                {p.id === pid && <span className="text-xs opacity-60 ml-1">(você)</span>}
                 {p.bot && isHost && (
                   <button onClick={() => removeBot(p.id)} className="ml-auto text-red-600 font-bold px-2" title="Remover IA">✕</button>
                 )}
@@ -2190,6 +2398,75 @@ export default function MagnataBrasilPremium() {
             </div>
           );
         })()}
+        {/* MODAL: Checkout PIX Mercado Pago */}
+        {pixModal.show && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3" style={{ background: "rgba(0,0,0,.65)" }} onClick={() => setPixModal(prev => ({ ...prev, show: false }))}>
+            <div className="w-full max-w-sm rounded-2xl p-5 text-center" style={{ background: "#FBF5E9", color: "#1A1A1A", boxShadow: "0 20px 50px rgba(0,0,0,0.5)" }} onClick={(e) => e.stopPropagation()}>
+              <h3 className="font-bold text-lg mb-1 text-blue-800">⚡ Pagamento do Boost ({pixModal.boost.toUpperCase()})</h3>
+              <p className="text-xs opacity-75 mb-3">O bônus de <b>+R$ {pixModal.bonus.toLocaleString("pt-BR")}</b> será creditado ao iniciar a partida!</p>
+              
+              <div className="bg-white p-3 rounded-xl inline-block mb-3 border-2 border-dashed border-blue-400">
+                {pixModal.qrCodeBase64 ? (
+                  <img src={`data:image/png;base64,${pixModal.qrCodeBase64}`} alt="QR Code PIX" className="w-48 h-48 mx-auto" />
+                ) : (
+                  <div className="w-48 h-48 mx-auto flex flex-col items-center justify-center bg-gray-100 text-gray-500 rounded-lg">
+                    <span className="text-4xl mb-1">📱</span>
+                    <span className="text-xs font-bold px-2 text-center">QR CODE PIX SIMULADO</span>
+                    <span className="text-[9px] opacity-75 mt-1">(Modo de Desenvolvimento)</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="text-sm font-bold text-green-700 mb-2">Valor: R$ {pixModal.amount.toFixed(2)}</div>
+              
+              <div className="mb-3 text-left">
+                <label className="text-[10px] font-bold opacity-60 uppercase">Código PIX Copia e Cola:</label>
+                <div className="flex gap-1 mt-0.5">
+                  <input 
+                    readOnly 
+                    value={pixModal.qrCode || ""} 
+                    onClick={(e) => e.target.select()}
+                    className="flex-1 text-xs px-2 py-1.5 rounded-lg border border-gray-300 bg-gray-50 font-mono truncate"
+                  />
+                  <button 
+                    onClick={() => {
+                      navigator.clipboard.writeText(pixModal.qrCode);
+                      alert("Código PIX copiado! Copie e cole no app do seu banco.");
+                    }}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 text-xs font-bold rounded-lg"
+                  >
+                    Copiar
+                  </button>
+                </div>
+              </div>
+
+              {pixModal.simulation ? (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 mb-4">
+                  <p className="text-[10px] text-yellow-700 font-semibold mb-2 leading-tight">
+                    💡 O servidor está sem credenciais do Mercado Pago ou fora do ar. Use a simulação abaixo para testar o boost de graça!
+                  </p>
+                  <button 
+                    onClick={simulatePixPayment} 
+                    className="w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-bold text-sm py-2 rounded-xl shadow-lg transition-all"
+                  >
+                    Simular Pagamento PIX 🤝
+                  </button>
+                </div>
+              ) : (
+                <p className="text-[10px] opacity-60 animate-pulse mb-3">
+                  ⏳ Aguardando confirmação do pagamento... O boost ativa automaticamente ao pagar.
+                </p>
+              )}
+
+              <button 
+                onClick={() => setPixModal(prev => ({ ...prev, show: false }))} 
+                className="w-full border-2 border-gray-400 text-gray-700 font-bold py-2 rounded-xl text-sm"
+              >
+                Voltar
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     );
   }

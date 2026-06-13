@@ -37,10 +37,8 @@ function makeCloudAdapter() {
     realtime: { params: { eventsPerSecond: 20 } },
   });
 
-  // cache local alimentado pelo Realtime: key -> value (sempre o mais recente)
   const cache = new Map();
 
-  // ouve TODAS as mudanças na tabela kv e mantém o cache atualizado na hora
   supabase
     .channel("kv-stream")
     .on(
@@ -60,13 +58,27 @@ function makeCloudAdapter() {
     apikey: SUPABASE_KEY,
     Authorization: `Bearer ${SUPABASE_KEY}`,
     "Content-Type": "application/json",
+    Prefer: "return=minimal",
   };
 
+  // Identifica se a chave precisa ser compartilhada (salva na nuvem)
+  // Somente dados do jogo ou chat de sala são guardados na nuvem.
+  // Chaves como player ID (magnata:pid) e último jogo (magnata3:last) ficam localmente no aparelho de cada um.
+  const isSharedKey = (key) => key.includes(":game:") || key.includes(":chat:");
+
   return {
-    async get(key) {
-      // 1) cache do Realtime (instantâneo)
-      if (cache.has(key)) return { value: cache.get(key) };
-      // 2) primeira leitura: busca via REST e popula o cache
+    async get(key, shared = false) {
+      if (!isSharedKey(key)) {
+        try {
+          const v = localStorage.getItem(key);
+          return v == null ? null : { value: v };
+        } catch {
+          return null;
+        }
+      }
+
+      if (!shared && cache.has(key)) return { value: cache.get(key) };
+      
       try {
         const r = await fetch(
           `${SUPABASE_URL}/rest/v1/kv?key=eq.${encodeURIComponent(key)}&select=value`,
@@ -83,14 +95,31 @@ function makeCloudAdapter() {
         return null;
       }
     },
-    async set(key, value) {
-      cache.set(key, value); // reflete localmente na hora
-      try {
-        await fetch(`${SUPABASE_URL}/rest/v1/kv`, {
-          method: "POST",
-          headers: { ...headers, Prefer: "resolution=merge-duplicates,return=minimal" },
-          body: JSON.stringify({ key, value, updated_at: new Date().toISOString() }),
+    async set(key, value, shared = true) {
+      if (!isSharedKey(key)) {
+        try {
+          localStorage.setItem(key, value);
+        } catch {}
+        return { value };
+      }
+
+      cache.set(key, value);
+      const body = { key, value, updated_at: new Date().toISOString() };
+      
+      const attempt = async (method) => {
+        const url = method === "PATCH" 
+          ? `${SUPABASE_URL}/rest/v1/kv?key=eq.${encodeURIComponent(key)}`
+          : `${SUPABASE_URL}/rest/v1/kv`;
+        return fetch(url, {
+          method,
+          headers: { ...headers, Prefer: method === "POST" ? "resolution=merge-duplicates,return=minimal" : "return=minimal" },
+          body: JSON.stringify(body),
         });
+      };
+
+      try {
+        let res = await attempt("POST");
+        if (!res.ok) await attempt("PATCH");
       } catch {}
       return { value };
     },
