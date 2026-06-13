@@ -13,6 +13,7 @@ export default function PublicRoomsScreen({ onBack, onJoinRoom }) {
   const [selectedRoom, setSelectedRoom] = useState(null);
   const [passwordInput, setPasswordInput] = useState("");
   const [passwordError, setPasswordError] = useState("");
+  const [debugInfo, setDebugInfo] = useState("");
 
   useEffect(() => {
     if (!supabase) {
@@ -48,38 +49,50 @@ export default function PublicRoomsScreen({ onBack, onJoinRoom }) {
 
   const loadPublicRooms = async () => {
     try {
+      setDebugInfo("🔍 Buscando salas públicas...");
       console.log("🔍 Buscando salas públicas...");
       console.log("Supabase conectado:", !!supabase);
 
+      if (!supabase) {
+        setDebugInfo("❌ Supabase não configurado!");
+        setRooms([]);
+        setLoading(false);
+        return;
+      }
+
+      // Query simplificada - buscar TODAS as salas públicas primeiro
       const { data, error } = await supabase
         .from("matches")
-        .select(`
-          *,
-          host:host_id (
-            display_name,
-            avatar_url
-          ),
-          players:match_players (
-            id,
-            user_id,
-            player_name
-          )
-        `)
+        .select("*")
         .eq("is_public", true)
-        .in("status", ["waiting", "playing"])
         .order("created_at", { ascending: false });
 
       if (error) {
         console.error("❌ Erro ao carregar salas:", error);
-        console.error("Detalhes do erro:", JSON.stringify(error, null, 2));
+        setDebugInfo(`❌ ERRO: ${error.message || JSON.stringify(error)}`);
         setRooms([]);
       } else {
         console.log("✅ Salas carregadas:", data);
-        console.log("Total de salas encontradas:", data?.length || 0);
-        setRooms(data || []);
+        setDebugInfo(`✅ ${data?.length || 0} salas encontradas no banco!`);
+
+        // Buscar jogadores separadamente para cada sala
+        const roomsWithPlayers = await Promise.all(
+          data.map(async (room) => {
+            const { data: players } = await supabase
+              .from("match_players")
+              .select("*")
+              .eq("match_id", room.id);
+
+            return { ...room, players: players || [] };
+          })
+        );
+
+        console.log("Salas com jogadores:", roomsWithPlayers);
+        setRooms(roomsWithPlayers);
       }
     } catch (err) {
       console.error("❌ Erro inesperado ao carregar salas:", err);
+      setDebugInfo(`❌ ERRO INESPERADO: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -206,16 +219,43 @@ export default function PublicRoomsScreen({ onBack, onJoinRoom }) {
           </p>
         </div>
 
-        {/* Busca */}
-        <div className="mb-4">
+        {/* Debug Info */}
+        {debugInfo && (
+          <div
+            className="mb-4 p-4 rounded-xl text-center font-bold"
+            style={{
+              background: debugInfo.includes("❌") ? "#fee" : debugInfo.includes("✅") ? "#efe" : "#fff3cd",
+              color: debugInfo.includes("❌") ? "#c00" : debugInfo.includes("✅") ? "#080" : "#856404",
+              border: `2px solid ${debugInfo.includes("❌") ? "#f88" : debugInfo.includes("✅") ? "#8f8" : "#ffc107"}`,
+            }}
+          >
+            {debugInfo}
+          </div>
+        )}
+
+        {/* Busca e Recarregar */}
+        <div className="mb-4 flex gap-2">
           <input
             type="text"
             placeholder="🔍 Buscar sala por nome, código ou host..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full px-4 py-3 rounded-xl border-2"
+            className="flex-1 px-4 py-3 rounded-xl border-2"
             style={{ borderColor: "#ddd" }}
           />
+          <button
+            onClick={() => {
+              setLoading(true);
+              loadPublicRooms();
+            }}
+            className="px-6 py-3 rounded-xl font-bold"
+            style={{
+              background: "linear-gradient(135deg, #46BC74 0%, #1E7A46 100%)",
+              color: "#fff",
+            }}
+          >
+            🔄 Recarregar
+          </button>
         </div>
 
         {/* Lista de Salas */}

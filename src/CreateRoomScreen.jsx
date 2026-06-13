@@ -14,6 +14,7 @@ export default function CreateRoomScreen({ userId, userName, onBack, onRoomCreat
   const [numBots, setNumBots] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
 
   // Gera código único de 4 letras
   const generateRoomCode = () => {
@@ -90,6 +91,7 @@ export default function CreateRoomScreen({ userId, userName, onBack, onRoomCreat
         }
 
         console.log("✅ Sala criada no DB:", matchData);
+        setSuccessMessage(`✅ Sala "${roomName.trim()}" criada com sucesso! Código: ${roomCode}`);
 
         // Adicionar o host como primeiro jogador na tabela match_players
         console.log("👤 Adicionando host como jogador...");
@@ -105,7 +107,7 @@ export default function CreateRoomScreen({ userId, userName, onBack, onRoomCreat
         if (playerError) {
           console.error("❌ Erro ao adicionar host como jogador:", playerError);
           console.error("Detalhes:", JSON.stringify(playerError, null, 2));
-          // Não vamos bloquear a criação da sala por isso
+          setSuccessMessage(`⚠️ Sala criada mas houve erro ao adicionar jogador. Código: ${roomCode}`);
         } else {
           console.log("✅ Host adicionado como jogador na sala");
         }
@@ -174,6 +176,12 @@ export default function CreateRoomScreen({ userId, userName, onBack, onRoomCreat
           {error && (
             <div className="mb-4 p-3 rounded-lg bg-red-100 border border-red-300 text-red-700 text-sm">
               {error}
+            </div>
+          )}
+
+          {successMessage && (
+            <div className="mb-4 p-3 rounded-lg bg-green-100 border border-green-300 text-green-700 text-sm font-bold">
+              {successMessage}
             </div>
           )}
 
