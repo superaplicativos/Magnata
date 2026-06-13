@@ -645,10 +645,27 @@ export default function MagnataBrasilPremium() {
   const handleSelectBoost = async (boostId) => {
     const prices = { bronze: 0.10, prata: 0.20, ouro: 0.30 };
     const bonuses = { bronze: 5000, prata: 10000, ouro: 20000 };
-    
-    setBusy(true);
+
+    console.log("🚀 Botão de boost clicado:", boostId);
+
+    // ABRE O MODAL IMEDIATAMENTE com loading
+    setPixModal({
+      show: true,
+      boost: boostId,
+      amount: prices[boostId],
+      bonus: bonuses[boostId],
+      qrCode: null,
+      qrCodeBase64: null,
+      id: null,
+      status: "loading",
+      simulation: false
+    });
+
+    // Tenta buscar QR Code real da API
     try {
       const myName = name || "Jogador";
+      console.log("📡 Chamando API do Mercado Pago...");
+
       const response = await fetch("/api/create-pix", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -660,6 +677,9 @@ export default function MagnataBrasilPremium() {
       }
 
       const data = await response.json();
+      console.log("✅ QR Code real gerado:", data);
+
+      // Atualiza modal com dados reais
       setPixModal({
         show: true,
         boost: boostId,
@@ -672,7 +692,9 @@ export default function MagnataBrasilPremium() {
         simulation: false
       });
     } catch (e) {
-      console.warn("Falha ao gerar PIX real (talvez sem chaves do Mercado Pago). Ativando simulação para testes.", e);
+      console.warn("⚠️ Falha ao gerar PIX real. Ativando modo simulação.", e);
+
+      // Atualiza modal para modo simulação
       setPixModal({
         show: true,
         boost: boostId,
@@ -684,8 +706,6 @@ export default function MagnataBrasilPremium() {
         status: "pending",
         simulation: true
       });
-    } finally {
-      setBusy(false);
     }
   };
 
@@ -1737,8 +1757,7 @@ export default function MagnataBrasilPremium() {
                   <button
                     key={b.id}
                     onClick={() => handleSelectBoost(b.id)}
-                    disabled={busy}
-                    className="flex flex-col items-center justify-between p-2 rounded-xl text-center border-2 transition-all relative overflow-hidden"
+                    className="flex flex-col items-center justify-between p-2 rounded-xl text-center border-2 transition-all relative overflow-hidden hover:scale-105 active:scale-95"
                     style={{
                       background: b.bg,
                       borderColor: hasThisBoost ? "#FFF" : "transparent",
@@ -2472,7 +2491,13 @@ export default function MagnataBrasilPremium() {
               <p className="text-xs opacity-75 mb-3">O bônus de <b>+R$ {pixModal.bonus.toLocaleString("pt-BR")}</b> será creditado ao iniciar a partida!</p>
               
               <div className="bg-white p-3 rounded-xl inline-block mb-3 border-2 border-dashed border-blue-400">
-                {pixModal.qrCodeBase64 ? (
+                {pixModal.status === "loading" ? (
+                  <div className="w-48 h-48 mx-auto flex flex-col items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg">
+                    <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-200 border-t-blue-600 mb-3"></div>
+                    <span className="text-sm font-bold text-blue-800">Gerando QR Code...</span>
+                    <span className="text-[10px] opacity-60 mt-1 animate-pulse">Aguarde alguns segundos</span>
+                  </div>
+                ) : pixModal.qrCodeBase64 ? (
                   <img src={`data:image/png;base64,${pixModal.qrCodeBase64}`} alt="QR Code PIX" className="w-48 h-48 mx-auto" />
                 ) : (
                   <div className="w-48 h-48 mx-auto flex flex-col items-center justify-center bg-gray-100 text-gray-500 rounded-lg">
@@ -2485,34 +2510,40 @@ export default function MagnataBrasilPremium() {
 
               <div className="text-sm font-bold text-green-700 mb-2">Valor: R$ {pixModal.amount.toFixed(2)}</div>
               
-              <div className="mb-3 text-left">
-                <label className="text-[10px] font-bold opacity-60 uppercase">Código PIX Copia e Cola:</label>
-                <div className="flex gap-1 mt-0.5">
-                  <input 
-                    readOnly 
-                    value={pixModal.qrCode || ""} 
-                    onClick={(e) => e.target.select()}
-                    className="flex-1 text-xs px-2 py-1.5 rounded-lg border border-gray-300 bg-gray-50 font-mono truncate"
-                  />
-                  <button 
-                    onClick={() => {
-                      navigator.clipboard.writeText(pixModal.qrCode);
-                      alert("Código PIX copiado! Copie e cole no app do seu banco.");
-                    }}
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 text-xs font-bold rounded-lg"
-                  >
-                    Copiar
-                  </button>
+              {pixModal.status !== "loading" && (
+                <div className="mb-3 text-left">
+                  <label className="text-[10px] font-bold opacity-60 uppercase">Código PIX Copia e Cola:</label>
+                  <div className="flex gap-1 mt-0.5">
+                    <input
+                      readOnly
+                      value={pixModal.qrCode || ""}
+                      onClick={(e) => e.target.select()}
+                      className="flex-1 text-xs px-2 py-1.5 rounded-lg border border-gray-300 bg-gray-50 font-mono truncate"
+                    />
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(pixModal.qrCode);
+                        alert("Código PIX copiado! Cole no app do seu banco.");
+                      }}
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 text-xs font-bold rounded-lg"
+                    >
+                      Copiar
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
 
-              {pixModal.simulation ? (
+              {pixModal.status === "loading" ? (
+                <p className="text-xs text-blue-700 font-semibold mb-3 animate-pulse">
+                  ⚡ Conectando com Mercado Pago...
+                </p>
+              ) : pixModal.simulation ? (
                 <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 mb-4">
                   <p className="text-[10px] text-yellow-700 font-semibold mb-2 leading-tight">
                     💡 O servidor está sem credenciais do Mercado Pago ou fora do ar. Use a simulação abaixo para testar o boost de graça!
                   </p>
-                  <button 
-                    onClick={simulatePixPayment} 
+                  <button
+                    onClick={simulatePixPayment}
                     className="w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-bold text-sm py-2 rounded-xl shadow-lg transition-all"
                   >
                     Simular Pagamento PIX 🤝
