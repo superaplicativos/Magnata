@@ -70,7 +70,7 @@ export default function CreateRoomScreen({ userId, userName, onBack, onRoomCreat
           .insert({
             room_code: roomCode,
             room_name: roomName.trim(),
-            host_id: userId !== `guest_${Date.now()}` ? userId : null, // Null se guest
+            host_id: userId.startsWith("guest_") ? null : userId, // Null se visitante
             status: "waiting",
             boost_enabled: boostEnabled,
             is_public: isPublic,
