@@ -1843,6 +1843,12 @@ export default function MagnataBrasilPremium({ userId, userName, initialGameCode
   /* ---------- LOBBY ---------- */
   if (screen === "lobby" && game) {
     const isHost = game.host === pid;
+    console.log("🎮 LOBBY - Debug:");
+    console.log("  game.host:", game.host);
+    console.log("  pid:", pid);
+    console.log("  isHost:", isHost);
+    console.log("  game.players.length:", game.players.length);
+
     return (
       <div className="mb-felt mb-body min-h-screen flex items-center justify-center p-4 text-white">
         <style>{css}</style>
@@ -1852,6 +1858,10 @@ export default function MagnataBrasilPremium({ userId, userName, initialGameCode
             <p className="text-sm opacity-80 mt-1">Compartilhe com seus amigos</p>
             <div className="mb-mono text-6xl font-bold tracking-widest mt-2 rounded-2xl py-3" style={{ background: "rgba(0,0,0,.25)", color: "#FBF5E9" }}>
               {game.code}
+            </div>
+            {/* DEBUG INFO */}
+            <div className="text-xs mt-2 opacity-50">
+              Host: {game.host} | Você: {pid} | {isHost ? "✅ Você é o host" : "❌ Você NÃO é o host"}
             </div>
             <button
               onClick={() => {
@@ -1986,6 +1996,16 @@ export default function MagnataBrasilPremium({ userId, userName, initialGameCode
               <button onClick={addBot} disabled={busy} className="mb-btn w-full rounded-xl py-2.5 mt-3 font-bold border-2 border-dashed" style={{ borderColor: "#F58A1F", color: "#C26508" }}>
                 + Adicionar jogador IA 🤖
               </button>
+            )}
+            {!isHost && (
+              <div className="text-xs mt-3 p-2 rounded bg-yellow-100 text-yellow-800">
+                ⚠️ Apenas o host ({game.host}) pode adicionar bots
+              </div>
+            )}
+            {game.players.length >= 6 && (
+              <div className="text-xs mt-3 p-2 rounded bg-gray-100 text-gray-600">
+                Sala cheia (6/6 jogadores)
+              </div>
             )}
 
             {/* Botão "Estou Pronto" para jogadores humanos */}
