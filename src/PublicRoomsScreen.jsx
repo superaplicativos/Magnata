@@ -60,11 +60,13 @@ export default function PublicRoomsScreen({ onBack, onJoinRoom }) {
         return;
       }
 
-      // Query simplificada - buscar TODAS as salas públicas primeiro
+      // Buscar salas públicas: aguardando E em andamento (mas não encerradas)
       const { data, error } = await supabase
         .from("matches")
         .select("*")
         .eq("is_public", true)
+        .in("status", ["waiting", "playing"])
+        .order("status", { ascending: true }) // waiting primeiro, depois playing
         .order("created_at", { ascending: false });
 
       if (error) {
@@ -131,7 +133,7 @@ export default function PublicRoomsScreen({ onBack, onJoinRoom }) {
     const playerCount = room.players?.length || 0;
     const maxPlayers = room.max_players || 4;
 
-    if (room.status === "playing") return "🔴"; // Em jogo
+    if (room.status === "playing") return "🎮"; // Em jogo
     if (playerCount >= maxPlayers) return "🔴"; // Cheia
     if (playerCount >= maxPlayers - 1) return "🟡"; // Quase cheia
     return "🟢"; // Disponível
@@ -141,12 +143,13 @@ export default function PublicRoomsScreen({ onBack, onJoinRoom }) {
     const playerCount = room.players?.length || 0;
     const maxPlayers = room.max_players || 4;
 
-    if (room.status === "playing") return "EM JOGO";
+    if (room.status === "playing") return "EM ANDAMENTO";
     if (playerCount >= maxPlayers) return "CHEIA";
     return "AGUARDANDO";
   };
 
   const canJoin = (room) => {
+    // Só pode entrar se estiver aguardando e tiver espaço
     const playerCount = room.players?.length || 0;
     const maxPlayers = room.max_players || 4;
     return room.status === "waiting" && playerCount < maxPlayers;
@@ -340,13 +343,17 @@ export default function PublicRoomsScreen({ onBack, onJoinRoom }) {
                           background:
                             statusText === "AGUARDANDO"
                               ? "#d1f4e0"
-                              : statusText === "CHEIA" || statusText === "EM JOGO"
+                              : statusText === "EM ANDAMENTO"
+                              ? "#e3f2fd"
+                              : statusText === "CHEIA"
                               ? "#f8d7da"
                               : "#fff3cd",
                           color:
                             statusText === "AGUARDANDO"
                               ? "#155724"
-                              : statusText === "CHEIA" || statusText === "EM JOGO"
+                              : statusText === "EM ANDAMENTO"
+                              ? "#0d47a1"
+                              : statusText === "CHEIA"
                               ? "#721c24"
                               : "#856404",
                         }}
@@ -366,8 +373,19 @@ export default function PublicRoomsScreen({ onBack, onJoinRoom }) {
                           cursor: joinable ? "pointer" : "not-allowed",
                           opacity: joinable ? 1 : 0.6,
                         }}
+                        title={
+                          !joinable && room.status === "playing"
+                            ? "Partida em andamento - não é possível entrar"
+                            : !joinable
+                            ? "Sala cheia ou indisponível"
+                            : "Clique para entrar"
+                        }
                       >
-                        {room.password_hash ? "🔒 ENTRAR" : "ENTRAR"}
+                        {room.status === "playing"
+                          ? "ASSISTIR"
+                          : room.password_hash
+                          ? "🔒 ENTRAR"
+                          : "ENTRAR"}
                       </button>
                     </div>
                   </div>

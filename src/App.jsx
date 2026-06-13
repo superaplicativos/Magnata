@@ -127,6 +127,54 @@ export default function App() {
 
   const handleLogout = async () => {
     try {
+      // Encerrar salas onde o usuário é host ou criador antes de sair
+      if (supabase && user?.id) {
+        console.log("🔴 Encerrando salas abertas pelo usuário...");
+
+        // 1. Para usuários registrados: encerrar salas onde é host
+        if (!user.id.startsWith("guest_")) {
+          const { error: updateError } = await supabase
+            .from("matches")
+            .update({
+              status: "ended",
+              ended_at: new Date().toISOString()
+            })
+            .eq("host_id", user.id)
+            .in("status", ["waiting", "playing"]);
+
+          if (updateError) {
+            console.error("Erro ao encerrar salas:", updateError);
+          } else {
+            console.log("✅ Salas de usuário registrado encerradas");
+          }
+        }
+
+        // 2. Para visitantes: buscar salas criadas por ele (como único jogador)
+        // e marcar como ended
+        const { data: playerMatches } = await supabase
+          .from("match_players")
+          .select("match_id")
+          .eq("user_id", user.id);
+
+        if (playerMatches && playerMatches.length > 0) {
+          const matchIds = playerMatches.map(pm => pm.match_id);
+
+          const { error: visitorUpdateError } = await supabase
+            .from("matches")
+            .update({
+              status: "ended",
+              ended_at: new Date().toISOString()
+            })
+            .in("id", matchIds)
+            .in("status", ["waiting", "playing"])
+            .is("host_id", null); // Só salas de visitante
+
+          if (!visitorUpdateError) {
+            console.log("✅ Salas de visitante encerradas");
+          }
+        }
+      }
+
       // Limpar sessão do Supabase se existir
       if (supabase) {
         await supabase.auth.signOut();
