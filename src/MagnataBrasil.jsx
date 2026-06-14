@@ -885,17 +885,19 @@ export default function MagnataBrasilPremium({ userId, userName, initialGameCode
         setJoinCode(roomParam.toUpperCase().slice(0, 4));
       }
 
-      let id = null;
-      try {
-        const r = await window.storage.get("magnata:pid");
-        id = r ? r.value : null;
-      } catch (e) {}
+      let id = userId || null;
       if (!id) {
-        id = "p" + Math.random().toString(36).slice(2, 10);
         try {
-          await window.storage.set("magnata:pid", id);
+          const r = await window.storage.get("magnata:pid");
+          id = r ? r.value : null;
         } catch (e) {}
+        if (!id) {
+          id = "p" + Math.random().toString(36).slice(2, 10);
+        }
       }
+      try {
+        await window.storage.set("magnata:pid", id);
+      } catch (e) {}
       setPid(id);
 
       // Só tenta reconectar se não houver um parâmetro de sala na URL (para evitar prender em salas velhas)

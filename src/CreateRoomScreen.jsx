@@ -117,24 +117,42 @@ export default function CreateRoomScreen({ userId, userName, onBack, onRoomCreat
         console.warn("⚠️ Supabase não configurado - sala criada apenas localmente");
       }
 
+      const botNames = ["Saci", "Iara", "Curupira", "Boitata", "Caipora"];
+      const botPlayers = Array.from({ length: numBots }, (_, index) => ({
+        id: `bot_${roomCode}_${index + 1}`,
+        bot: true,
+        name: botNames[index] || `Robo ${index + 1}`,
+        token: index + 1,
+        pos: 0,
+        money: 1500,
+        inJail: false,
+        jailTurns: 0,
+        bankrupt: false,
+        abandoned: false,
+        ready: true,
+      }));
+
       // Criar objeto do jogo no formato esperado pelo MagnataBrasil.jsx
       const gameData = {
         code: roomCode,
         v: 0,
         status: "lobby",
         host: userId,
-        players: [{
-          id: userId,
-          name: userName,
-          token: 0, // Default token index
-          pos: 0,
-          money: 1500, // START_MONEY from MagnataBrasil.jsx
-          inJail: false,
-          jailTurns: 0,
-          bankrupt: false,
-          abandoned: false,
-          ready: false
-        }],
+        players: [
+          {
+            id: userId,
+            name: userName,
+            token: 0,
+            pos: 0,
+            money: 1500,
+            inJail: false,
+            jailTurns: 0,
+            bankrupt: false,
+            abandoned: false,
+            ready: false,
+          },
+          ...botPlayers,
+        ],
         props: {},
         currentTurn: 0,
         turn: { phase: "roll", doubles: 0, canBuy: null },
