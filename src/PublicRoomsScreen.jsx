@@ -5,7 +5,7 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const supabase = SUPABASE_URL && SUPABASE_KEY ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
-export default function PublicRoomsScreen({ onBack, onJoinRoom }) {
+export default function PublicRoomsScreen({ userId, userName, onBack, onJoinRoom }) {
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -102,7 +102,56 @@ export default function PublicRoomsScreen({ onBack, onJoinRoom }) {
     }
   };
 
-  const handleJoinRoom = (room) => {
+  const joinGameInKv = async (roomCode) => {
+    try {
+      // Load the current game from kv storage
+      const gameKey = `magnata3:game:${roomCode}`;
+      const gameData = await window.storage.get(gameKey, true);
+      
+      if (gameData) {
+        const game = JSON.parse(gameData.value);
+        
+        // Check if the player is already in the game
+        const existingPlayer = game.players.find(p => p.id === userId);
+        if (!existingPlayer) {
+          // Find an available token index
+          const usedTokens = game.players.map(p => p.token);
+          let tokenIndex = 0;
+          while (usedTokens.includes(tokenIndex)) {
+            tokenIndex++;
+          }
+          
+          // Add the new player
+          game.players.push({
+            id: userId,
+            name: userName,
+            token: tokenIndex,
+            pos: 0,
+            money: 1500,
+            inJail: false,
+            jailTurns: 0,
+            bankrupt: false,
+            abandoned: false,
+            ready: false
+          });
+          
+          // Increment version
+          game.v = (game.v || 0) + 1;
+          game.updatedAt = Date.now();
+          
+          // Add a log entry
+          game.log = [`${userName} entrou na sala.`, ...(game.log || [])].slice(0, 14);
+          
+          // Save the updated game back to kv storage
+          await window.storage.set(gameKey, JSON.stringify(game), true);
+        }
+      }
+    } catch (e) {
+      console.error("Error updating game in kv storage:", e);
+    }
+  };
+
+  const handleJoinRoom = async (room) => {
     // Se tem senha, mostrar modal
     if (room.password_hash) {
       setSelectedRoom(room);
@@ -111,11 +160,12 @@ export default function PublicRoomsScreen({ onBack, onJoinRoom }) {
       setPasswordError("");
     } else {
       // Entrar diretamente
+      await joinGameInKv(room.room_code);
       onJoinRoom(room.room_code, null);
     }
   };
 
-  const handlePasswordSubmit = () => {
+  const handlePasswordSubmit = async () => {
     if (!passwordInput) {
       setPasswordError("Digite a senha.");
       return;
@@ -125,6 +175,7 @@ export default function PublicRoomsScreen({ onBack, onJoinRoom }) {
     const inputHash = btoa(passwordInput);
     if (inputHash === selectedRoom.password_hash) {
       setShowPasswordModal(false);
+      await joinGameInKv(selectedRoom.room_code);
       onJoinRoom(selectedRoom.room_code, passwordInput);
     } else {
       setPasswordError("Senha incorreta.");

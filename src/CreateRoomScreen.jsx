@@ -120,10 +120,29 @@ export default function CreateRoomScreen({ userId, userName, onBack, onRoomCreat
       // Criar objeto do jogo no formato esperado pelo MagnataBrasil.jsx
       const gameData = {
         code: roomCode,
-        name: roomName.trim(),
+        v: 0,
+        status: "lobby",
         host: userId,
-        players: [],
-        status: "waiting",
+        players: [{
+          id: userId,
+          name: userName,
+          token: 0, // Default token index
+          pos: 0,
+          money: 1500, // START_MONEY from MagnataBrasil.jsx
+          inJail: false,
+          jailTurns: 0,
+          bankrupt: false,
+          abandoned: false,
+          ready: false
+        }],
+        props: {},
+        currentTurn: 0,
+        turn: { phase: "roll", doubles: 0, canBuy: null },
+        dice: null,
+        log: [],
+        lastCard: null,
+        trade: null,
+        roomName: roomName.trim(),
         boostEnabled,
         isPublic,
         maxPlayers,

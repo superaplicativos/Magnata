@@ -25,6 +25,7 @@ export default function GameRouter({ userId, userName }) {
 
   // Callback após criar sala - vai para o lobby do jogo
   const handleRoomCreated = (roomCode, roomData) => {
+    console.log("🎲 Sala criada, navegando para jogo. Código:", roomCode);
     setGameCode(roomCode);
     setCurrentScreen("game");
   };
@@ -152,7 +153,7 @@ export default function GameRouter({ userId, userName }) {
   // Tela de Salas Públicas
   if (currentScreen === "public-rooms") {
     return (
-      <PublicRoomsScreen onBack={handleBackToMenu} onJoinRoom={handleJoinRoom} />
+      <PublicRoomsScreen userId={userId} userName={userName} onBack={handleBackToMenu} onJoinRoom={handleJoinRoom} />
     );
   }
 
